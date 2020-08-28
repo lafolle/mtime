@@ -35,7 +35,6 @@ fn get_rusage() -> RUsage {
     }
 }
 
-// mean, stddev, min, median, max.
 fn stats(usages: Vec<RunMetrics>) {
     let real_usages: Vec<i64> = usages
         .iter()
