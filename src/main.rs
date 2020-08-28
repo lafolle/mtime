@@ -9,18 +9,19 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod config;
 mod stats;
-use stats::{max, mean, median, min, std_dev};
+use config::Config;
+use stats::{ContextStat, stats};
 
-struct RunMetrics {
-    wall_clock_dur: Duration,
-    rusage: RUsage,
+pub struct RunMetrics {
+    pub wall_clock_dur: Duration,
+    pub rusage: RUsage,
 }
 
-#[derive(Debug)]
-struct RUsage {
-    user_tv_usec: i64,
-    system_tv_usec: i64,
+pub struct RUsage {
+    pub user_tv_usec: i64,
+    pub system_tv_usec: i64,
 }
 
 fn get_rusage() -> RUsage {
@@ -35,39 +36,32 @@ fn get_rusage() -> RUsage {
     }
 }
 
-fn stats(usages: Vec<RunMetrics>) {
-    let real_usages: Vec<i64> = usages
-        .iter()
-        .map(|ru| ru.wall_clock_dur.as_micros() as i64)
-        .collect();
-    let user_usages: Vec<i64> = usages.iter().map(|ru| ru.rusage.user_tv_usec).collect();
-    let system_usages: Vec<i64> = usages.iter().map(|ru| ru.rusage.system_tv_usec).collect();
-
+fn display(ctx_stats: ContextStat) {
     let mut table = table!(
         ["", "Mean", "Std.Dev.", "Min", "Median", "Max"],
         [
             "real",
-            format!("{:.3}", mean(&real_usages) / 1e6),
-            format!("{:.3}", median(&real_usages) / 1e6),
-            format!("{:.3}", std_dev(&real_usages) / 1e6),
-            format!("{:.3}", *min(&real_usages).unwrap() as f64 / 1e6),
-            format!("{:.3}", *max(&real_usages).unwrap() as f64 / 1e6)
+            format!("{:.3}", ctx_stats.wall.mean),
+            format!("{:.3}", ctx_stats.wall.std_dev),
+            format!("{:.3}", ctx_stats.wall.min),
+            format!("{:.3}", ctx_stats.wall.median),
+            format!("{:.3}", ctx_stats.wall.max)
         ],
         [
             "user",
-            format!("{:.3}", mean(&user_usages) / 1e6),
-            format!("{:.3}", median(&user_usages) / 1e6),
-            format!("{:.3}", std_dev(&user_usages) / 1e6),
-            format!("{:.3}", *min(&user_usages).unwrap() as f64 / 1e6),
-            format!("{:.3}", *max(&user_usages).unwrap() as f64 / 1e6)
+            format!("{:.3}", ctx_stats.user.mean),
+            format!("{:.3}", ctx_stats.user.std_dev),
+            format!("{:.3}", ctx_stats.user.min),
+            format!("{:.3}", ctx_stats.user.median),
+            format!("{:.3}", ctx_stats.user.max)
         ],
         [
             "sys",
-            format!("{:.3}", mean(&system_usages) / 1e6),
-            format!("{:.3}", median(&system_usages) / 1e6),
-            format!("{:.3}", std_dev(&system_usages) / 1e6),
-            format!("{:.3}", *min(&system_usages).unwrap() as f64 / 1e6),
-            format!("{:.3}", *max(&system_usages).unwrap() as f64 / 1e6)
+            format!("{:.3}", ctx_stats.sys.mean),
+            format!("{:.3}", ctx_stats.sys.std_dev),
+            format!("{:.3}", ctx_stats.sys.min),
+            format!("{:.3}", ctx_stats.sys.median),
+            format!("{:.3}", ctx_stats.sys.max)
         ]
     );
 
@@ -78,22 +72,24 @@ fn stats(usages: Vec<RunMetrics>) {
 }
 
 // Simple mode supported.
-fn run(cmd: Vec<&str>, num_runs: u32, sleep_dur: u32) {
-    let between = Uniform::from(0..sleep_dur + 1);
+fn run(cfg: Config) {
+    let between = Uniform::from(0..cfg.sleep_dur + 1);
     let mut rng = rand::thread_rng();
 
-    let command_program = cmd[0];
+    let command_program = &cfg.cmd[0];
 
     let mut command = Command::new(command_program);
-    command.args(&cmd[1..]);
+    command.args(&cfg.cmd[1..]);
 
     let mut i = 0;
-    let mut rusage_per_run: Vec<RunMetrics> = Vec::with_capacity(num_runs as usize);
+    let mut rusage_per_run: Vec<RunMetrics> = Vec::with_capacity(cfg.num_runs as usize);
     let mut last_cum_rusage: RUsage = get_rusage();
-    while i < num_runs {
+    while i < cfg.num_runs {
         let start = Instant::now();
         let output = command.output().unwrap();
-        io::stdout().write_all(&output.stdout).unwrap();
+        if !cfg.quiet_stdout {
+            io::stdout().write_all(&output.stdout).unwrap();
+        }
         io::stderr().write_all(&output.stderr).unwrap();
         let wall_clock_dur = start.elapsed();
 
@@ -115,7 +111,7 @@ fn run(cmd: Vec<&str>, num_runs: u32, sleep_dur: u32) {
             system_tv_usec: cum_usage.system_tv_usec,
         };
 
-        if i != num_runs - 1 && sleep_dur > 0 {
+        if i != cfg.num_runs - 1 && cfg.sleep_dur > 0 {
             let rand_secs = between.sample(&mut rng);
             let sleep_dur = Duration::from_secs(rand_secs as u64);
             thread::sleep(sleep_dur);
@@ -123,20 +119,24 @@ fn run(cmd: Vec<&str>, num_runs: u32, sleep_dur: u32) {
 
         i += 1;
     }
-    stats(rusage_per_run);
+    let ctx_stats = stats(rusage_per_run);
+    display(ctx_stats);
 }
 
-struct Config {
-    
-}
-
-fn main() {
-    // Parse CLI args.
-    let matches = App::new("mtime")
+fn config() -> Config {
+    let matches = App::new("multitime")
         .setting(AppSettings::TrailingVarArg)
         .version("0.0")
         .author("lafolle")
         .about("Rust port of multitime")
+        .arg(
+            Arg::with_name("quiet")
+                .short("q")
+                .long("quiet")
+                .takes_value(false)
+                .required(false)
+                .help("Do not emit output of cmd to stdout")
+        )
         .arg(
             Arg::with_name("numruns")
                 .short("n")
@@ -171,7 +171,24 @@ fn main() {
         .unwrap_or("0")
         .parse::<u32>()
         .unwrap();
-    let cmd: Vec<&str> = matches.values_of("cmd").unwrap().collect();
+    let quiet_stdout = matches.is_present("quiet");
+    let cmd: Vec<String> = matches
+        .values_of("cmd")
+        .unwrap()
+        .collect::<Vec<&str>>()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
-    run(cmd, num_runs, sleep_dur);
+    Config {
+        cmd,
+        num_runs,
+        sleep_dur,
+        quiet_stdout,
+    }
+}
+
+fn main() {
+    let cfg = config();
+    run(cfg);
 }
