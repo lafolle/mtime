@@ -130,11 +130,11 @@ fn run(cfg: Config) {
 }
 
 fn config() -> Config {
-    let matches = App::new("multitime")
+    let matches = App::new("mtime")
         .setting(AppSettings::TrailingVarArg)
         .version("0.0")
         .author("lafolle")
-        .about("Rust port of multitime")
+        .about("Rust port of mtime")
         .arg(
             Arg::with_name("quiet")
                 .short("q")

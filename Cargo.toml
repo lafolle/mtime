@@ -1,5 +1,5 @@
 [package]
-name = "multitime"
+name = "mtime"
 version = "0.1.0"
 authors = ["lafolle <fghjklp@gmail.com>"]
 edition = "2018"
