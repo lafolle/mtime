@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 mod config;
 mod stats;
 use config::Config;
-use stats::{ContextStat, stats};
+use stats::{stats, ContextStat};
 
 pub struct RunMetrics {
     pub wall_clock_dur: Duration,
@@ -73,6 +73,12 @@ fn display(ctx_stats: ContextStat) {
 
 // Simple mode supported.
 fn run(cfg: Config) {
+
+    if cfg.initial_delay != 0 {
+        let s = Duration::from_secs(cfg.initial_delay as u64);
+        thread::sleep(s);
+    }
+
     let between = Uniform::from(0..cfg.sleep_dur + 1);
     let mut rng = rand::thread_rng();
 
@@ -154,6 +160,14 @@ fn config() -> Config {
                 .help("Sleeps randomly (uniform distribution) for [0..sleep] duration between executing commands")
         )
         .arg(
+            Arg::with_name("initial-delay")
+                .short("d")
+                .long("--initial-delay")
+                .takes_value(true)
+                .required(false)
+                .help("Waits for this many seconds before executing first run of command")
+        )
+        .arg(
             Arg::with_name("cmd")
                 .required(true)
                 .multiple(true)
@@ -172,6 +186,11 @@ fn config() -> Config {
         .parse::<u32>()
         .unwrap();
     let quiet_stdout = matches.is_present("quiet");
+    let initial_delay = matches
+        .value_of("initial-delay")
+        .unwrap_or("0")
+        .parse::<u32>()
+        .unwrap();
     let cmd: Vec<String> = matches
         .values_of("cmd")
         .unwrap()
@@ -184,6 +203,7 @@ fn config() -> Config {
         cmd,
         num_runs,
         sleep_dur,
+        initial_delay,
         quiet_stdout,
     }
 }
