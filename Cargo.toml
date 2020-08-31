@@ -3,6 +3,13 @@ name = "mtime"
 version = "0.1.0"
 authors = ["lafolle <fghjklp@gmail.com>"]
 edition = "2018"
+description = "Rust port of multitime with custom changes."
+homepage = "https://github.com/lafolle/mtime"
+repository = "https://github.com/lafolle/mtime" 
+readme = "README.md"
+license = "MIT"
+keywords = ["time", "multitime"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
